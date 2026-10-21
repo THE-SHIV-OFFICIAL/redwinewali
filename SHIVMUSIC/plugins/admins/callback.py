@@ -40,32 +40,62 @@ PREMIUM_EMOJIS = [
     5409368076447657845, 6172312314423808834, 6082387600599944892, 6271537028307881531
 ]
 
+
 # 🎨 Dynamic Color Generator
 def get_style_map():
     styles = [ButtonStyle.PRIMARY, ButtonStyle.SUCCESS, ButtonStyle.DANGER]
     random.shuffle(styles)
     return {1: styles[0], 2: styles[1], 3: styles[2], 4: styles[0]}
 
+
 # 🔘 Smart Button Creator
 def create_btn(text, cb=None, url=None, style=ButtonStyle.PRIMARY, emoji_id=None, no_emoji=False):
     kwargs = {"text": text, "style": style}
-    if cb: kwargs["callback_data"] = cb
-    if url: kwargs["url"] = url
-    
+    if cb:
+        kwargs["callback_data"] = cb
+    if url:
+        kwargs["url"] = url
+
     # Premium Emoji Logic
     if emoji_id:
         kwargs["icon_custom_emoji_id"] = int(emoji_id)
     elif not no_emoji:
         kwargs["icon_custom_emoji_id"] = int(random.choice(PREMIUM_EMOJIS))
-        
+
     return InlineKeyboardButton(**kwargs)
+
+
+def _build_current_markup(_, chat_id, message=None, paused=None):
+    has_timer = False
+    try:
+        if message and message.reply_markup and message.reply_markup.inline_keyboard:
+            first_row = message.reply_markup.inline_keyboard[0]
+            if first_row and getattr(first_row[0], "callback_data", None) == "GetTimer":
+                has_timer = True
+    except Exception:
+        has_timer = False
+
+    playing = db.get(chat_id)
+    if has_timer and playing and len(playing) > 0 and playing[0].get("dur"):
+        played_str = seconds_to_min(playing[0].get("played", 0))
+        dur_str = playing[0].get("dur")
+        try:
+            return stream_markup_timer(_, chat_id, played_str, dur_str, paused=paused)
+        except TypeError:
+            return stream_markup_timer(_, chat_id, played_str, dur_str)
+
+    try:
+        return stream_markup(_, chat_id, paused=paused)
+    except TypeError:
+        return stream_markup(_, chat_id)
+
 
 @app.on_callback_query(filters.regex("settingsback_helper") & ~BANNED_USERS)
 @languageCB
 async def settings_back_helper(client, CallbackQuery, _):
     try:
         await CallbackQuery.answer()
-    except:
+    except Exception:
         pass
 
     if isinstance(START_IMG_URL, list):
@@ -83,6 +113,7 @@ async def settings_back_helper(client, CallbackQuery, _):
         ),
         reply_markup=InlineKeyboardMarkup(private_panel(_))
     )
+
 
 @app.on_callback_query(filters.regex("support_page") & ~BANNED_USERS)
 @languageCB
@@ -110,11 +141,12 @@ async def support_page_cb(client, CallbackQuery, _):
 
     await CallbackQuery.edit_message_media(
         media=InputMediaPhoto(
-            media="https://files.catbox.moe/4hl7n8.jpg", 
+            media="https://files.catbox.moe/4hl7n8.jpg",
             caption=support_text
         ),
         reply_markup=InlineKeyboardMarkup(custom_support_buttons)
     )
+
 
 @app.on_callback_query(filters.regex("gib_source"))
 async def gib_repo_callback(_, callback_query):
@@ -123,7 +155,7 @@ async def gib_repo_callback(_, callback_query):
         style_map = get_style_map()
         await callback_query.edit_message_media(
             media=InputMediaPhoto(
-                media=image_url, 
+                media=image_url,
                 caption=f"<blockquote><b><tg-emoji emoji-id=\"5258389041006518073\">📂</tg-emoji> ʀєᴘσ = ||ɪsᴛᴋʜᴧʀ ᴧηᴅ ᴅєᴠɪʟ ᴋσ ᴘᴧᴘᴧ ʙσʟ ᴄʜᴧʟ ʙσʟ😎||</b></blockquote>"
             ),
             reply_markup=InlineKeyboardMarkup(
@@ -138,6 +170,7 @@ async def gib_repo_callback(_, callback_query):
     except Exception as e:
         await callback_query.answer(f"Error: {str(e)}", show_alert=True)
 
+
 @app.on_callback_query(filters.regex("unban_assistant"))
 async def unban_assistant(_, callback: CallbackQuery):
     chat_id = callback.message.chat.id
@@ -147,6 +180,7 @@ async def unban_assistant(_, callback: CallbackQuery):
         await callback.answer("✅ ᴧssɪsᴛᴧηᴛ υηʙᴧηηєᴅ sυᴄᴄєssғυʟʟʏ!", show_alert=True)
     except Exception:
         await callback.answer("❌ ғᴧɪʟєᴅ ᴛσ υηʙᴧη. ɢɪᴠє ϻє ᴧᴅϻɪη ᴘєʀϻɪssɪσηs.", show_alert=True)
+
 
 @app.on_callback_query(filters.regex("ADMIN") & ~BANNED_USERS)
 @languageCB
@@ -165,14 +199,18 @@ async def del_back_playlist(client, CallbackQuery, _):
     style_map = get_style_map()
 
     if command == "UpVote":
-        if chat_id not in votemode: votemode[chat_id] = {}
-        if chat_id not in upvoters: upvoters[chat_id] = {}
+        if chat_id not in votemode:
+            votemode[chat_id] = {}
+        if chat_id not in upvoters:
+            upvoters[chat_id] = {}
 
         voters = (upvoters[chat_id]).get(CallbackQuery.message.id)
-        if not voters: upvoters[chat_id][CallbackQuery.message.id] = []
+        if not voters:
+            upvoters[chat_id][CallbackQuery.message.id] = []
 
         vote = (votemode[chat_id]).get(CallbackQuery.message.id)
-        if not vote: votemode[chat_id][CallbackQuery.message.id] = 0
+        if not vote:
+            votemode[chat_id][CallbackQuery.message.id] = 0
 
         if CallbackQuery.from_user.id in upvoters[chat_id][CallbackQuery.message.id]:
             (upvoters[chat_id][CallbackQuery.message.id]).remove(CallbackQuery.from_user.id)
@@ -191,11 +229,11 @@ async def del_back_playlist(client, CallbackQuery, _):
                 current = db[chat_id][0]
                 if current["vidid"] != exists["vidid"] or current["file"] != exists["file"]:
                     return await CallbackQuery.edit_message_text(_["admin_35"])
-            except:
+            except Exception:
                 return await CallbackQuery.edit_message_text(_["admin_36"])
             try:
                 await CallbackQuery.edit_message_text(_["admin_37"].format(upvote))
-            except:
+            except Exception:
                 pass
             command = counter
             mention = "υᴘᴠσᴛєs"
@@ -231,17 +269,54 @@ async def del_back_playlist(client, CallbackQuery, _):
                 if not allowed:
                     return await CallbackQuery.answer(_["admin_14"], show_alert=True)
 
+    if command == "TogglePause":
+        await CallbackQuery.answer()
+
+        if await is_music_playing(chat_id):
+            await ANJALI.pause_stream(chat_id)
+            await music_off(chat_id)
+            paused = True
+        else:
+            await ANJALI.resume_stream(chat_id)
+            await music_on(chat_id)
+            paused = False
+
+        try:
+            buttons = _build_current_markup(_, chat_id, CallbackQuery.message, paused=paused)
+            await CallbackQuery.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return
+
     if command == "Pause":
-        if not await is_music_playing(chat_id): return await CallbackQuery.answer(_["admin_1"], show_alert=True)
+        if not await is_music_playing(chat_id):
+            return await CallbackQuery.answer(_["admin_1"], show_alert=True)
         await CallbackQuery.answer()
         await ANJALI.pause_stream(chat_id)
         await music_off(chat_id)
+        try:
+            buttons = _build_current_markup(_, chat_id, CallbackQuery.message, paused=True)
+            await CallbackQuery.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
         await CallbackQuery.message.reply_text(_["admin_2"].format(mention), reply_markup=close_markup(_))
     elif command == "Resume":
-        if await is_music_playing(chat_id): return await CallbackQuery.answer(_["admin_3"], show_alert=True)
+        if await is_music_playing(chat_id):
+            return await CallbackQuery.answer(_["admin_3"], show_alert=True)
         await CallbackQuery.answer()
         await ANJALI.resume_stream(chat_id)
         await music_on(chat_id)
+        try:
+            buttons = _build_current_markup(_, chat_id, CallbackQuery.message, paused=False)
+            await CallbackQuery.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
         await CallbackQuery.message.reply_text(_["admin_4"].format(mention), reply_markup=close_markup(_))
     elif command == "Stop" or command == "End":
         await CallbackQuery.answer()
@@ -256,15 +331,23 @@ async def del_back_playlist(client, CallbackQuery, _):
             await CallbackQuery.answer("🔴 ᴧυᴛσᴘʟᴧʏ ᴅɪsᴧʙʟєᴅ!", show_alert=True)
             await CallbackQuery.message.reply_text(
                 f"<blockquote><b><tg-emoji emoji-id=\"5318840353510408444\">🔴</tg-emoji> <tg-emoji emoji-id=\"6082387600599944892\">🎧</tg-emoji> ᴧυᴛσᴘʟᴧʏ sʏsᴛєϻ</b>\n\n<b>ᴧυᴛσᴘʟᴧʏ ғσʀ ᴛʜɪs ɢʀσυᴘ ɪs ησᴡ ᴅɪsᴧʙʟєᴅ <tg-emoji emoji-id=\"5318840353510408444\">🔴</tg-emoji>.</b>\n└ <b>ʙʏ :</b> {mention}</blockquote>",
-                 reply_markup=close_markup(_)
+                reply_markup=close_markup(_)
             )
         else:
             await autoplay_on(chat_id)
             await CallbackQuery.answer("🟢 ᴧυᴛσᴘʟᴧʏ єηᴧʙʟєᴅ!", show_alert=True)
             await CallbackQuery.message.reply_text(
                 f"<blockquote><b><tg-emoji emoji-id=\"6113685078825505075\">🟢</tg-emoji> <tg-emoji emoji-id=\"6082387600599944892\">🎧</tg-emoji> ᴧυᴛσᴘʟᴧʏ sʏsᴛєϻ</b>\n\n<b>ᴧυᴛσᴘʟᴧʏ ғσʀ ᴛʜɪs ɢʀσυᴘ ɪs ησᴡ єηᴧʙʟєᴅ <tg-emoji emoji-id=\"6113685078825505075\">🟢</tg-emoji>.</b>\n└ <b>ʙʏ :</b> {mention}</blockquote>",
-                  reply_markup=close_markup(_)
+                reply_markup=close_markup(_)
             )
+        try:
+            paused_now = not await is_music_playing(chat_id)
+            buttons = _build_current_markup(_, chat_id, CallbackQuery.message, paused=paused_now)
+            await CallbackQuery.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
     elif command == "Skip" or command == "Replay":
         check = db.get(chat_id)
         if not check or len(check) == 0:
@@ -274,12 +357,13 @@ async def del_back_playlist(client, CallbackQuery, _):
             txt = f"<blockquote><b><tg-emoji emoji-id=\"5850346984501680054\">▶️</tg-emoji> ➻ sᴛʀєᴧϻ sᴋɪᴘᴘєᴅ <tg-emoji emoji-id=\"6172273586703700991\">🥀</tg-emoji></b>\n│ \n└<b>ʙʏ :</b> {mention}</blockquote>"
             try:
                 popped = check.pop(0)
-                if popped: await auto_clean(popped)
+                if popped:
+                    await auto_clean(popped)
                 if not check:
                     await CallbackQuery.edit_message_text(txt)
                     await CallbackQuery.message.reply_text(_["admin_6"].format(mention, CallbackQuery.message.chat.title), reply_markup=close_markup(_))
                     return await ANJALI.stop_stream(chat_id)
-            except:
+            except Exception:
                 return await ANJALI.stop_stream(chat_id)
         else:
             txt = f"<blockquote><b><tg-emoji emoji-id=\"5960671702059848143\">⬅️</tg-emoji> ➻ sᴛʀєᴧϻ ʀє-ᴘʟᴧʏєᴅ <tg-emoji emoji-id=\"6172273586703700991\">🥀</tg-emoji></b>\n│ \n└<b>ʙʏ :</b> {mention}</blockquote>"
@@ -296,19 +380,20 @@ async def del_back_playlist(client, CallbackQuery, _):
 
         try:
             image = await YouTube.thumbnail(videoid, True)
-        except:
+        except Exception:
             image = None
 
         try:
             if "live_" in queued:
                 n, link = await YouTube.video(videoid, True)
-                if n == 0: return await CallbackQuery.message.reply_text(_["admin_7"].format(title))
+                if n == 0:
+                    return await CallbackQuery.message.reply_text(_["admin_7"].format(title))
                 await ANJALI.skip_stream(chat_id, link, video=status, image=image)
             elif "vid_" in queued:
-                 await ANJALI.skip_stream(chat_id, queued, video=status, image=image)
+                await ANJALI.skip_stream(chat_id, queued, video=status, image=image)
             else:
-                 await ANJALI.skip_stream(chat_id, queued, video=status, image=image)
-        except:
+                await ANJALI.skip_stream(chat_id, queued, video=status, image=image)
+        except Exception:
             return await CallbackQuery.message.reply_text(_["call_6"])
 
         button = stream_markup(_, chat_id)
@@ -323,31 +408,41 @@ async def del_back_playlist(client, CallbackQuery, _):
             db[chat_id][0]["markup"] = "tg"
         await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
 
+
 async def markup_timer():
     while not await asyncio.sleep(7):
         active_chats = await get_active_chats()
         for chat_id in active_chats:
             try:
-                if not await is_music_playing(chat_id): continue
+                if not await is_music_playing(chat_id):
+                    continue
                 playing = db.get(chat_id)
-                if not playing or int(playing[0]["seconds"]) == 0: continue
+                if not playing or int(playing[0]["seconds"]) == 0:
+                    continue
                 mystic = playing[0]["mystic"]
                 try:
-                    if checker[chat_id][mystic.id] is False: continue
-                except: pass
+                    if checker[chat_id][mystic.id] is False:
+                        continue
+                except Exception:
+                    pass
 
                 try:
                     language = await get_lang(chat_id)
                     _ = get_string(language)
-                except: _ = get_string("en")
+                except Exception:
+                    _ = get_string("en")
 
                 try:
                     buttons = stream_markup_timer(_, chat_id, seconds_to_min(playing[0]["played"]), playing[0]["dur"])
                     await mystic.edit_reply_markup(reply_markup=InlineKeyboardMarkup(buttons))
-                except: continue
-            except: continue
+                except Exception:
+                    continue
+            except Exception:
+                continue
 
-asyncio.create_task(markup_timer()) 
+
+asyncio.create_task(markup_timer())
+
 
 @app.on_message(filters.video & filters.private)
 async def get_my_own_file_id(client, message):
